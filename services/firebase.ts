@@ -2,6 +2,7 @@
 import firebase from "firebase/compat/app";
 import "firebase/compat/auth";
 import "firebase/compat/firestore";
+import "firebase/compat/functions";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -15,10 +16,13 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-firebase.initializeApp(firebaseConfig);
+if (!firebase.apps.length) {
+  firebase.initializeApp(firebaseConfig);
+}
 
 export const auth = firebase.auth();
 export const db = firebase.firestore();
+export const functions = firebase.functions();
 
 // FIX: Set auth persistence to 'session' to prevent errors in restricted
 // environments (like sandboxed iframes) where web storage might be disabled.

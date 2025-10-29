@@ -6,19 +6,43 @@ import { ActivityDetail } from './components/ActivityDetail';
 import { Planning } from './components/Planning';
 import { Profile } from './components/Profile';
 import { Settings } from './components/Settings';
+import { Subscription as SubscriptionPage } from './components/Subscription';
+import { Paywall } from './components/Paywall';
 import { Login } from './components/Login';
 import { auth, db } from './services/firebase';
-import { Activity, User, ActivityStatus, Intervention, Grade, UserSettings } from './types';
+import { Activity, User, ActivityStatus, Intervention, Grade, UserSettings, SubscriptionStatus } from './types';
 import { DEFAULT_ACTIVITY_COEFFICIENTS, DEFAULT_TIME_SLOTS } from './constants';
 import { BottomNav } from './components/BottomNav';
 
+type View = 'dashboard' | 'calendar' | 'profile' | 'settings' | 'subscription';
+
+// Helper function to reliably convert various types to a Date object
+const ensureDate = (date: any): Date | undefined => {
+    if (!date) return undefined;
+    // Already a Date object
+    if (date instanceof Date) return date;
+    // Handle Firestore Timestamps, which have a toDate method
+    if (typeof date.toDate === 'function') {
+        return date.toDate();
+    }
+    // Handle ISO strings or numbers (milliseconds from epoch)
+    const parsedDate = new Date(date);
+    if (!isNaN(parsedDate.getTime())) {
+        return parsedDate;
+    }
+    // Return undefined if conversion fails
+    return undefined;
+};
+
+
 const App: React.FC = () => {
-  const [activeView, setActiveView] = useState<'dashboard' | 'calendar' | 'profile' | 'settings'>('dashboard');
+  const [activeView, setActiveView] = useState<View>('dashboard');
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date());
+  const [isSubscriptionActive, setIsSubscriptionActive] = useState(true);
 
   useEffect(() => {
     let activitiesUnsubscribe: () => void | undefined;
@@ -30,10 +54,9 @@ const App: React.FC = () => {
 
         if (docSnap.exists) {
           let userData = docSnap.data() as User;
+          let needsDBUpdate = false;
           
-          // Ensure settings are present and complete by merging with defaults.
-          // This allows adding new settings options for existing users without overwriting their choices.
-          // FIX: Use optional chaining to safely access settings properties that may not exist on older user documents.
+          // Initialize settings if they don't exist
           const mergedSettings: UserSettings = {
             timeSlots: userData.settings?.timeSlots || DEFAULT_TIME_SLOTS,
             activityCoefficients: {
@@ -43,8 +66,36 @@ const App: React.FC = () => {
           };
           userData.settings = mergedSettings;
           
+          // Initialize subscription for existing users (migration)
+          if (!userData.subscription) {
+              const trialEndDate = new Date();
+              trialEndDate.setDate(trialEndDate.getDate() + 14); // 14-day trial
+              userData.subscription = {
+                  status: SubscriptionStatus.TRIALING,
+                  trialEndsAt: trialEndDate,
+              };
+              needsDBUpdate = true;
+          }
+
+          // Ensure subscription dates are proper Date objects
+          if (userData.subscription) {
+            userData.subscription.trialEndsAt = ensureDate(userData.subscription.trialEndsAt);
+            userData.subscription.endsAt = ensureDate(userData.subscription.endsAt);
+          }
+          
+          if (needsDBUpdate) {
+             const dataToUpdate: any = { subscription: userData.subscription };
+             if (dataToUpdate.subscription.trialEndsAt) {
+                 dataToUpdate.subscription.trialEndsAt = firebase.firestore.Timestamp.fromDate(dataToUpdate.subscription.trialEndsAt);
+             }
+             await userRef.update(dataToUpdate);
+          }
+
           setUser(userData);
         } else {
+          // Create new user
+          const trialEndDate = new Date();
+          trialEndDate.setDate(trialEndDate.getDate() + 14);
           const newUser: User = {
             id: firebaseUser.uid,
             nom: firebaseUser.displayName?.split(' ').slice(1).join(' ') || 'Utilisateur',
@@ -53,12 +104,24 @@ const App: React.FC = () => {
             avatarUrl: firebaseUser.photoURL || `https://picsum.photos/seed/${firebaseUser.uid}/200`,
             grade: Grade.Sapeur,
             caserne: 'CS-Principal',
-            settings: { // Add default settings for new user
+            settings: {
               timeSlots: DEFAULT_TIME_SLOTS,
               activityCoefficients: DEFAULT_ACTIVITY_COEFFICIENTS,
+            },
+            subscription: {
+              status: SubscriptionStatus.TRIALING,
+              trialEndsAt: trialEndDate,
             }
           };
-          await userRef.set(newUser);
+          // Convert date to Timestamp for Firestore
+          const newUserForFirestore = {
+              ...newUser,
+              subscription: {
+                  ...newUser.subscription,
+                  trialEndsAt: firebase.firestore.Timestamp.fromDate(trialEndDate),
+              }
+          }
+          await userRef.set(newUserForFirestore);
           setUser(newUser);
         }
         
@@ -83,9 +146,7 @@ const App: React.FC = () => {
           });
 
       } else {
-        if (activitiesUnsubscribe) {
-          activitiesUnsubscribe();
-        }
+        if (activitiesUnsubscribe) activitiesUnsubscribe();
         setUser(null);
         setActivities([]);
       }
@@ -94,11 +155,27 @@ const App: React.FC = () => {
 
     return () => {
       authUnsubscribe();
-      if (activitiesUnsubscribe) {
-        activitiesUnsubscribe();
-      }
+      if (activitiesUnsubscribe) activitiesUnsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+      if (user && user.subscription) {
+          const { status, trialEndsAt, endsAt } = user.subscription;
+          const now = new Date();
+          if (status === SubscriptionStatus.ACTIVE && (!endsAt || endsAt > now)) {
+              setIsSubscriptionActive(true);
+          } else if (status === SubscriptionStatus.TRIALING && trialEndsAt && trialEndsAt > now) {
+              setIsSubscriptionActive(true);
+          } else {
+              setIsSubscriptionActive(false);
+          }
+      } else if (!user) {
+          setIsSubscriptionActive(true); // Don't show paywall on login screen
+      } else {
+          setIsSubscriptionActive(false); // No user or subscription info
+      }
+  }, [user]);
   
   // Effect to update selectedActivity when activities list changes
   useEffect(() => {
@@ -116,14 +193,24 @@ const App: React.FC = () => {
     setSelectedActivity(null);
   };
 
-  const handleSetActiveView = (view: 'dashboard' | 'calendar' | 'profile' | 'settings') => {
+  const handleSetActiveView = (view: View) => {
     setSelectedActivity(null);
     setActiveView(view);
   };
   
   const handleUpdateUser = async (updatedUser: User) => {
     if (user) {
-        const { id, ...dataToUpdate } = updatedUser;
+        const { id, ...dataToUpdateAny } = updatedUser;
+        const dataToUpdate = dataToUpdateAny as any;
+
+        // Convert Dates back to Timestamps before sending to Firestore
+        if (dataToUpdate.subscription?.trialEndsAt) {
+            dataToUpdate.subscription.trialEndsAt = firebase.firestore.Timestamp.fromDate(dataToUpdate.subscription.trialEndsAt);
+        }
+        if (dataToUpdate.subscription?.endsAt) {
+            dataToUpdate.subscription.endsAt = firebase.firestore.Timestamp.fromDate(dataToUpdate.subscription.endsAt);
+        }
+
         const userRef = db.collection('users').doc(id);
         await userRef.update(dataToUpdate);
         setUser(updatedUser); // Update local state immediately for a responsive UI
@@ -203,6 +290,12 @@ const App: React.FC = () => {
 
 
   const renderContent = () => {
+    const restricted = !isSubscriptionActive && activeView !== 'subscription' && activeView !== 'profile';
+
+    if (restricted) {
+      return <Paywall setActiveView={handleSetActiveView} user={user!} />;
+    }
+
     if (selectedActivity) {
       return <ActivityDetail 
                 activity={selectedActivity} 
@@ -226,9 +319,11 @@ const App: React.FC = () => {
                     setCurrentDate={setCurrentCalendarDate}
                 />;
       case 'profile':
-        return <Profile user={user!} onUpdateUser={handleUpdateUser} onLogout={handleLogout} />;
+        return <Profile user={user!} onUpdateUser={handleUpdateUser} onLogout={handleLogout} setActiveView={handleSetActiveView} />;
       case 'settings':
         return <Settings user={user!} onUpdateUser={handleUpdateUser} />;
+      case 'subscription':
+        return <SubscriptionPage user={user!} />;
       default:
         return <Dashboard user={user!} activities={activities} onSelectActivity={handleSelectActivity} />;
     }

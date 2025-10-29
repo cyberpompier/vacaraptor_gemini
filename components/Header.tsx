@@ -4,11 +4,12 @@ import { DashboardIcon } from './icons/DashboardIcon';
 import { CalendarIcon } from './icons/CalendarIcon';
 import { UserIcon } from './icons/UserIcon';
 import { SettingsIcon } from './icons/SettingsIcon';
+import { CreditCardIcon } from './icons/CreditCardIcon';
 
 interface HeaderProps {
   user: User;
   activeView: string;
-  setActiveView: (view: 'dashboard' | 'calendar' | 'profile' | 'settings') => void;
+  setActiveView: (view: 'dashboard' | 'calendar' | 'profile' | 'settings' | 'subscription') => void;
 }
 
 const MenuIcon: React.FC = () => (
@@ -32,9 +33,10 @@ export const Header: React.FC<HeaderProps> = ({ user, activeView, setActiveView 
     { id: 'calendar', label: 'Planning', icon: CalendarIcon },
     { id: 'profile', label: 'Profil', icon: UserIcon },
     { id: 'settings', label: 'Paramètres', icon: SettingsIcon },
+    { id: 'subscription', label: 'Abonnement', icon: CreditCardIcon },
   ];
 
-  const handleNavClick = (view: 'dashboard' | 'calendar' | 'profile' | 'settings') => {
+  const handleNavClick = (view: 'dashboard' | 'calendar' | 'profile' | 'settings' | 'subscription') => {
     setActiveView(view);
     setIsMenuOpen(false);
   }

@@ -32,6 +32,18 @@ export enum SubActivityType {
   InterventionDimancheFerie = "InterventionDimancheFerie",
 }
 
+export enum SubscriptionStatus {
+  TRIALING = "trialing",
+  ACTIVE = "active",
+  ENDED = "ended", // Covers canceled, expired, etc. for simplicity
+}
+
+export interface Subscription {
+  status: SubscriptionStatus;
+  trialEndsAt?: Date;
+  endsAt?: Date; // Current period end
+}
+
 export interface TimeSlot {
   start: string; // "HH:mm"
   end: string;   // "HH:mm"
@@ -54,6 +66,7 @@ export interface User {
   caserne: string;
   telephone?: string;
   settings?: UserSettings;
+  subscription?: Subscription;
 }
 
 export interface Intervention {

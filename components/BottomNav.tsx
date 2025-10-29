@@ -3,18 +3,20 @@ import { DashboardIcon } from './icons/DashboardIcon';
 import { CalendarIcon } from './icons/CalendarIcon';
 import { UserIcon } from './icons/UserIcon';
 import { SettingsIcon } from './icons/SettingsIcon';
+import { CreditCardIcon } from './icons/CreditCardIcon';
 
 interface BottomNavProps {
   activeView: string;
-  setActiveView: (view: 'dashboard' | 'calendar' | 'profile' | 'settings') => void;
+  setActiveView: (view: 'dashboard' | 'calendar' | 'profile' | 'settings' | 'subscription') => void;
 }
 
 export const BottomNav: React.FC<BottomNavProps> = ({ activeView, setActiveView }) => {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: DashboardIcon },
     { id: 'calendar', label: 'Planning', icon: CalendarIcon },
+    { id: 'subscription', label: 'Abonnement', icon: CreditCardIcon },
     { id: 'profile', label: 'Profil', icon: UserIcon },
-    { id: 'settings', label: 'Paramètres', icon: SettingsIcon },
+    // { id: 'settings', label: 'Paramètres', icon: SettingsIcon },
   ];
 
   return (

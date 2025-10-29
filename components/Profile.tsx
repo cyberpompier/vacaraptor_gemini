@@ -1,11 +1,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Grade } from '../types';
+import { CreditCardIcon } from './icons/CreditCardIcon';
 
 interface ProfileProps {
   user: User;
   onUpdateUser: (updatedUser: User) => void;
   onLogout: () => void;
+  setActiveView: (view: 'subscription') => void;
 }
 
 const FormInput: React.FC<{ label: string; id: string; type?: string; value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void }> = ({ label, id, type = 'text', value, onChange }) => (
@@ -45,7 +47,7 @@ const FormSelect: React.FC<{ label: string; id: string; value: string; onChange:
     </div>
 );
 
-export const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onLogout }) => {
+export const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onLogout, setActiveView }) => {
     const [formData, setFormData] = useState(user);
     const [isDirty, setIsDirty] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -132,6 +134,16 @@ export const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onLogout }
                                     {Object.values(Grade).map(g => <option key={g} value={g}>{g}</option>)}
                                </FormSelect>
                                <FormInput label="Caserne" id="caserne" value={formData.caserne} onChange={handleChange} />
+                            </div>
+                            <div>
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveView('subscription')}
+                                    className="w-full mt-2 flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600"
+                                >
+                                    <CreditCardIcon className="h-5 w-5 mr-2" />
+                                    Gérer mon abonnement
+                                </button>
                             </div>
                         </div>
                     </div>
