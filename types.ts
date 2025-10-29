@@ -28,6 +28,20 @@ export enum SubActivityType {
   AstreinteDomicile = "Astreinte Domicile",
   Intervention = "Intervention",
   Formation = "Formation",
+  InterventionNuit = "InterventionNuit",
+  InterventionDimancheFerie = "InterventionDimancheFerie",
+}
+
+export interface TimeSlot {
+  start: string; // "HH:mm"
+  end: string;   // "HH:mm"
+}
+
+export interface UserSettings {
+  timeSlots: {
+    gardeCS: TimeSlot[];
+  };
+  activityCoefficients: Record<SubActivityType, number>;
 }
 
 export interface User {
@@ -39,6 +53,7 @@ export interface User {
   grade: Grade;
   caserne: string;
   telephone?: string;
+  settings?: UserSettings;
 }
 
 export interface Intervention {

@@ -7,16 +7,32 @@ export const GRADE_RATES: Record<Grade, number> = {
   [Grade.Lieutenant]: 12.96,
 };
 
-export const ACTIVITY_COEFFICIENTS: Record<SubActivityType, number> = {
+export const SUB_ACTIVITY_LABELS: Record<SubActivityType, string> = {
+  [SubActivityType.GardeCS]: 'Garde au Centre de Secours',
+  [SubActivityType.AstreinteCS]: 'Astreinte au Centre de Secours',
+  [SubActivityType.AstreinteDomicile]: 'Astreinte à Domicile',
+  [SubActivityType.Intervention]: 'Intervention',
+  [SubActivityType.InterventionNuit]: 'Intervention (Nuit 22H - 7H)',
+  [SubActivityType.InterventionDimancheFerie]: 'Intervention (Dimanche et Férié)',
+  [SubActivityType.Formation]: 'Formation',
+};
+
+export const DEFAULT_ACTIVITY_COEFFICIENTS: Record<SubActivityType, number> = {
   [SubActivityType.GardeCS]: 0.65,
   [SubActivityType.AstreinteCS]: 0.35,
   [SubActivityType.AstreinteDomicile]: 0.08,
   [SubActivityType.Intervention]: 1.0,
-  [SubActivityType.Formation]: 1.0, // Assuming 100% for formation
+  [SubActivityType.Formation]: 1.0,
+  [SubActivityType.InterventionNuit]: 2.0,
+  [SubActivityType.InterventionDimancheFerie]: 1.5,
 };
 
-export const NIGHT_BONUS = 2.0; // 200%
-export const SUNDAY_HOLIDAY_BONUS = 1.5; // 150%
+export const DEFAULT_TIME_SLOTS = {
+    gardeCS: [
+        { start: '08:00', end: '12:00' },
+        { start: '14:00', end: '18:00' },
+    ]
+};
 
 export const MOCK_USER: User = {
     id: 'user-1',

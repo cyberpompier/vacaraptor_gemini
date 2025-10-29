@@ -71,6 +71,7 @@ export const AddActivityModal: React.FC<AddActivityModalProps> = ({ isOpen, onCl
         [ActivityType._12N]: 20, // 8:00 PM
         [ActivityType.ASTJ]: 8,  // 8:00 AM
         [ActivityType.ASTN]: 20, // 8:00 PM
+        [ActivityType.AST24]: 8, // 8:00 AM
     };
     
     const targetHour = defaultStartTimes[type];

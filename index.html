@@ -1,11 +1,11 @@
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Pompier Vacations</title>
+    <link rel="icon" type="image/png" href="/ecran-tel.png" />
+    <link rel="apple-touch-icon" href="/ecran-tel.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>VACARAPTOR</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -26,10 +26,26 @@
   "imports": {
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
     "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/"
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "firebase/": "https://aistudiocdn.com/firebase@^12.4.0/"
   }
 }
 </script>
+<style>
+  html, body, #root {
+    height: 100%;
+    overflow: hidden; /* Prevent body scroll */
+  }
+  body {
+    /* Prevent zooming, text selection, and tap highlights for a more native feel */
+    touch-action: manipulation; /* Disables double-tap to zoom */
+    -webkit-user-select: none;  /* Safari */
+    -moz-user-select: none;     /* Firefox */
+    -ms-user-select: none;      /* IE10+/Edge */
+    user-select: none;          /* Standard */
+    -webkit-tap-highlight-color: transparent;
+  }
+</style>
 </head>
   <body class="bg-brand-light dark:bg-brand-dark">
     <div id="root"></div>

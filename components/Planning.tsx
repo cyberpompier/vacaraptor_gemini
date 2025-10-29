@@ -57,7 +57,7 @@ export const Planning: React.FC<PlanningProps> = ({ activities, onSelectActivity
     <div className="p-4 sm:p-6 lg:p-8">
       <AddActivityModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onAddActivity={onAddActivity} />
       <div className="max-w-7xl mx-auto bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex flex-wrap items-center justify-between gap-4 p-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center gap-2 sm:gap-4">
             <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap">
               {currentDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
@@ -91,7 +91,7 @@ export const Planning: React.FC<PlanningProps> = ({ activities, onSelectActivity
             const dayActivities = getActivitiesForDay(day);
             const dayOfWeek = (firstDay + index) % 7;
             return (
-              <div key={day} className={`relative p-2 border-t border-r border-gray-200 dark:border-gray-700 min-h-[120px] ${dayOfWeek === 6 ? 'border-r-0' : ''}`}>
+              <div key={day} className={`relative p-1 sm:p-2 border-t border-r border-gray-200 dark:border-gray-700 min-h-[120px] ${dayOfWeek === 6 ? 'border-r-0' : ''}`}>
                 <span className={`flex items-center justify-center h-6 w-6 text-sm font-medium rounded-full ${isToday(day) ? 'bg-brand-red text-white' : 'text-gray-900 dark:text-white'}`}>
                     {day}
                 </span>
@@ -100,10 +100,10 @@ export const Planning: React.FC<PlanningProps> = ({ activities, onSelectActivity
                         <div 
                             key={act.id}
                             onClick={() => onSelectActivity(act)}
-                            className={`p-1 rounded text-xs truncate cursor-pointer hover:opacity-80 transition ${ACTIVITY_TYPE_COLORS[act.type]}`}
+                            className={`p-1 rounded text-[10px] sm:text-xs truncate cursor-pointer hover:opacity-80 transition ${ACTIVITY_TYPE_COLORS[act.type]}`}
                             title={`${act.type} - ${act.start.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`}
                         >
-                            <span className="font-semibold">{act.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span> {act.type.split('(')[0]}
+                            <span className="font-semibold">{act.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span> <span className="hidden sm:inline">{act.type.split('(')[0]}</span>
                         </div>
                     ))}
                 </div>

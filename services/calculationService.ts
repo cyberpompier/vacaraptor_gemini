@@ -1,6 +1,6 @@
 
-import { Activity, User, Intervention, SubActivityType, CalculationResult, CalculationLine } from '../types';
-import { GRADE_RATES, ACTIVITY_COEFFICIENTS, NIGHT_BONUS, SUNDAY_HOLIDAY_BONUS } from '../constants';
+import { Activity, User, Intervention, SubActivityType, CalculationResult, CalculationLine, UserSettings } from '../types';
+import { GRADE_RATES, DEFAULT_ACTIVITY_COEFFICIENTS, DEFAULT_TIME_SLOTS, SUB_ACTIVITY_LABELS } from '../constants';
 
 const isNight = (date: Date): boolean => {
   const hour = date.getHours();
@@ -12,15 +12,30 @@ const isSundayOrHoliday = (date: Date): boolean => {
   return date.getDay() === 0;
 };
 
-const getSubActivityTypeForShift = (date: Date, activity: Activity): SubActivityType => {
+// Helper to convert "HH:mm" string to total minutes from midnight
+const timeToMinutes = (time: string): number => {
+    const [hours, minutes] = time.split(':').map(Number);
+    return hours * 60 + minutes;
+};
+
+const getSubActivityTypeForShift = (date: Date, activity: Activity, settings?: UserSettings): SubActivityType => {
   const isAstreinteType = activity.type.startsWith('Astreinte');
   if (isAstreinteType) return SubActivityType.AstreinteDomicile;
   if (activity.type === "Formation") return SubActivityType.Formation;
 
-  const hour = date.getHours();
-  if ((hour >= 8 && hour < 12) || (hour >= 14 && hour < 18)) {
-    return SubActivityType.GardeCS;
+  // Use user settings if available, otherwise fall back to defaults
+  const timeSlots = settings?.timeSlots?.gardeCS || DEFAULT_TIME_SLOTS.gardeCS;
+
+  const currentMinutes = date.getHours() * 60 + date.getMinutes();
+
+  for (const slot of timeSlots) {
+      const startMinutes = timeToMinutes(slot.start);
+      const endMinutes = timeToMinutes(slot.end);
+      if (currentMinutes >= startMinutes && currentMinutes < endMinutes) {
+          return SubActivityType.GardeCS;
+      }
   }
+
   return SubActivityType.AstreinteCS;
 };
 
@@ -32,6 +47,9 @@ export const calculateActivityPay = (activity: Activity, user: User): Calculatio
   const baseRate = GRADE_RATES[user.grade];
   const lines: CalculationLine[] = [];
   let totalAmount = 0;
+  
+  // Use user's custom coefficients or fall back to defaults
+  const activityCoefficients = user.settings?.activityCoefficients || DEFAULT_ACTIVITY_COEFFICIENTS;
 
   let currentTime = new Date(activity.start);
   const endTime = new Date(activity.end);
@@ -42,27 +60,29 @@ export const calculateActivityPay = (activity: Activity, user: User): Calculatio
     const intervention = findIntervention(currentTime, activity.interventions);
     let subActivityType: SubActivityType;
     let coefficient: number;
-    let bonus = 1.0;
+    const bonus = 1.0; // Bonus is now handled by specific coefficients
     let description: string;
     
     if (intervention) {
-      subActivityType = SubActivityType.Intervention;
-      coefficient = ACTIVITY_COEFFICIENTS[SubActivityType.Intervention];
-      description = `Intervention (${intervention.motif})`;
       const isNightTime = isNight(currentTime);
       const isSundayTime = isSundayOrHoliday(currentTime);
-      if (isNightTime && isSundayTime) {
-          bonus = Math.max(NIGHT_BONUS, SUNDAY_HOLIDAY_BONUS);
-      } else if (isNightTime) {
-          bonus = NIGHT_BONUS;
+
+      if (isNightTime) {
+        subActivityType = SubActivityType.InterventionNuit;
       } else if (isSundayTime) {
-          bonus = SUNDAY_HOLIDAY_BONUS;
+        subActivityType = SubActivityType.InterventionDimancheFerie;
+      } else {
+        subActivityType = SubActivityType.Intervention;
       }
+      
+      description = `${SUB_ACTIVITY_LABELS[subActivityType]} (${intervention.motif})`;
+
     } else {
-      subActivityType = getSubActivityTypeForShift(currentTime, activity);
-      coefficient = ACTIVITY_COEFFICIENTS[subActivityType];
-      description = subActivityType;
+      subActivityType = getSubActivityTypeForShift(currentTime, activity, user.settings);
+      description = SUB_ACTIVITY_LABELS[subActivityType];
     }
+
+    coefficient = activityCoefficients[subActivityType];
     
     const durationMinutes = 1;
     const durationHours = durationMinutes / 60;
@@ -75,7 +95,9 @@ export const calculateActivityPay = (activity: Activity, user: User): Calculatio
       lastLine &&
       lastLine.subActivityType === subActivityType &&
       lastLine.bonus === bonus &&
-      lastLine.coefficient === coefficient
+      lastLine.coefficient === coefficient &&
+      // Group interventions by their parent ID to avoid merging different interventions
+      (!intervention || (lastLine.description.includes(intervention.motif)))
     ) {
       lastLine.durationHours += durationHours;
       lastLine.total += minutePay;
@@ -105,30 +127,27 @@ export const calculateActivityPay = (activity: Activity, user: User): Calculatio
 
 export const calculateInterventionPay = (intervention: Intervention, user: User): number => {
     const baseRate = GRADE_RATES[user.grade];
+    const activityCoefficients = user.settings?.activityCoefficients || DEFAULT_ACTIVITY_COEFFICIENTS;
     let totalAmount = 0;
     let currentTime = new Date(intervention.start);
     const endTime = new Date(intervention.end);
 
     while (currentTime < endTime) {
         const nextTime = new Date(currentTime.getTime() + 60 * 1000); // Process minute by minute
-
-        const coefficient = ACTIVITY_COEFFICIENTS[SubActivityType.Intervention];
-        let bonus = 1.0;
-
-        const isNightTime = isNight(currentTime);
-        const isSundayTime = isSundayOrHoliday(currentTime);
-
-        if (isNightTime && isSundayTime) {
-            bonus = Math.max(NIGHT_BONUS, SUNDAY_HOLIDAY_BONUS);
-        } else if (isNightTime) {
-            bonus = NIGHT_BONUS;
-        } else if (isSundayTime) {
-            bonus = SUNDAY_HOLIDAY_BONUS;
+        
+        let subActivityType: SubActivityType;
+        if (isNight(currentTime)) {
+          subActivityType = SubActivityType.InterventionNuit;
+        } else if (isSundayOrHoliday(currentTime)) {
+          subActivityType = SubActivityType.InterventionDimancheFerie;
+        } else {
+          subActivityType = SubActivityType.Intervention;
         }
+        const coefficient = activityCoefficients[subActivityType];
 
         const durationMinutes = 1;
         const durationHours = durationMinutes / 60;
-        const minutePay = durationHours * baseRate * coefficient * bonus;
+        const minutePay = durationHours * baseRate * coefficient;
 
         totalAmount += minutePay;
         currentTime = nextTime;

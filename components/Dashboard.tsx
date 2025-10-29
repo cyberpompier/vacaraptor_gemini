@@ -1,8 +1,9 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Activity, User, Intervention, ActivityType } from '../types';
 import { calculateActivityPay, calculateInterventionPay } from '../services/calculationService';
 import { InterventionListModal } from './InterventionListModal';
+import { db } from '../services/firebase';
 
 interface DashboardProps {
   user: User;
@@ -12,18 +13,20 @@ interface DashboardProps {
 
 const StatCard: React.FC<{ title: string; value: string; details: string; onClick?: () => void; isClickable?: boolean; }> = ({ title, value, details, onClick, isClickable }) => (
   <div 
-    className={`bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 transition-transform transform hover:scale-105 ${isClickable ? 'cursor-pointer' : ''}`}
+    className={`bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 sm:p-6 transition-transform transform hover:scale-105 ${isClickable ? 'cursor-pointer' : ''}`}
     onClick={onClick}
     >
     <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">{title}</h3>
-    <p className="mt-1 text-3xl font-semibold text-gray-900 dark:text-white">{value}</p>
-    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{details}</p>
+    <p className="mt-1 text-2xl sm:text-3xl font-semibold text-gray-900 dark:text-white">{value}</p>
+    <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">{details}</p>
   </div>
 );
 
 export const Dashboard: React.FC<DashboardProps> = ({ user, activities, onSelectActivity }) => {
   const [period, setPeriod] = useState('month');
   const [isInterventionModalOpen, setIsInterventionModalOpen] = useState(false);
+  const [overlappingUsers, setOverlappingUsers] = useState<User[]>([]);
+  const [isLoadingOverlaps, setIsLoadingOverlaps] = useState(false);
 
   const filteredActivities = useMemo(() => {
     const now = new Date();
@@ -71,6 +74,64 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, activities, onSelect
         .sort((a,b) => a.start.getTime() - b.start.getTime())[0];
   }, [activities]);
 
+  useEffect(() => {
+    const fetchOverlappingUsers = async () => {
+        if (!upcomingActivity || !user) {
+            setOverlappingUsers([]);
+            return;
+        }
+
+        setIsLoadingOverlaps(true);
+        try {
+            // 1. Get users from the same station. We will filter out the current user on the client side.
+            // This avoids a complex query that requires a custom index.
+            const usersSnapshot = await db.collection('users')
+                .where('caserne', '==', user.caserne)
+                .get();
+
+            const allStationUsers = usersSnapshot.docs.map(doc => doc.data() as User);
+            const stationUsers = allStationUsers.filter(stationUser => stationUser.id !== user.id);
+
+            if (stationUsers.length === 0) {
+                setOverlappingUsers([]);
+                setIsLoadingOverlaps(false);
+                return;
+            }
+
+            // 2. For each user, check for overlapping activities using a valid query
+            const overlapPromises = stationUsers.map(async (stationUser) => {
+                // A valid Firestore query: find activities that START before the upcoming activity ENDS.
+                const activitiesSnapshot = await db.collection('users').doc(stationUser.id).collection('activities')
+                    .where('start', '<', upcomingActivity.end)
+                    .get();
+                
+                // Then, filter on the client-side for the actual overlap.
+                const hasOverlap = activitiesSnapshot.docs.some(doc => {
+                    const activityData = doc.data();
+                    // An activity overlaps if its END is after the upcoming one STARTS.
+                    return activityData.end.toDate() > upcomingActivity.start;
+                });
+
+                return hasOverlap ? stationUser : null;
+            });
+
+            const results = await Promise.all(overlapPromises);
+            const overlapping = results.filter((u): u is User => u !== null);
+            
+            setOverlappingUsers(overlapping);
+
+        } catch (error) {
+            console.error("Error fetching overlapping users:", error);
+            setOverlappingUsers([]);
+        } finally {
+            setIsLoadingOverlaps(false);
+        }
+    };
+
+    fetchOverlappingUsers();
+  }, [upcomingActivity, user]);
+
+
   const formatDate = (date: Date) => {
     return date.toLocaleString('fr-FR', {
         weekday: 'long',
@@ -83,17 +144,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, activities, onSelect
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-8">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8">
       <InterventionListModal 
         isOpen={isInterventionModalOpen}
         onClose={() => setIsInterventionModalOpen(false)}
         interventions={dashboardStats.monthlyInterventions}
       />
-      <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Dashboard du mois</h1>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard title="Revenu du mois" value={`€${dashboardStats.revenue}`} details="Calculé sur les gardes validées" />
-        <StatCard title="Heures cumulées" value={`${dashboardStats.hours} h`} details="Toutes activités confondues" />
-        <StatCard title="Gardes effectuées" value={String(dashboardStats.guards)} details="Ce mois-ci" />
+      <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Dashboard du mois</h1>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        <StatCard title="Revenu du mois" value={`€${dashboardStats.revenue}`} details="Calculé sur les gardes" />
+        <StatCard title="Heures cumulées" value={`${dashboardStats.hours} h`} details="Toutes activités" />
+        <StatCard title="Gardes" value={String(dashboardStats.guards)} details="Ce mois-ci" />
         <StatCard 
             title="Interventions" 
             value={String(dashboardStats.interventions)} 
@@ -103,17 +164,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, activities, onSelect
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Activités Récentes</h2>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
+        <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 sm:p-6">
+            <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white mb-4">Activités Récentes</h2>
             <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                     <thead className="bg-gray-50 dark:bg-gray-700">
                         <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Type</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Date</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Durée</th>
-                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Revenu Estimé</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Type</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Date</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Durée</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Revenu Estimé</th>
                         </tr>
                     </thead>
                     <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -122,10 +183,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, activities, onSelect
                             const revenue = calculateActivityPay(act, user).totalAmount.toFixed(2);
                             return (
                                 <tr key={act.id} onClick={() => onSelectActivity(act)} className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{act.type}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{act.start.toLocaleDateString()}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{duration}h</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 text-right font-semibold">€{revenue}</td>
+                                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">{act.type}</td>
+                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{act.start.toLocaleDateString()}</td>
+                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{duration}h</td>
+                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400 text-right font-semibold">€{revenue}</td>
                                 </tr>
                             )
                         })}
@@ -133,19 +194,43 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, activities, onSelect
                 </table>
             </div>
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Prochaine Activité</h2>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 sm:p-6">
+            <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white mb-4">Prochaine Activité</h2>
             {upcomingActivity ? (
                  <div className="space-y-4 flex flex-col h-full">
                     <div>
-                        <p className="text-lg font-bold text-brand-red">{upcomingActivity.type}</p>
-                        <p className="text-gray-700 dark:text-gray-300 mt-2">
+                        <p className="text-base sm:text-lg font-bold text-brand-red">{upcomingActivity.type}</p>
+                        <p className="text-sm text-gray-700 dark:text-gray-300 mt-2">
                             <span className="font-semibold">Début:</span> {formatDate(upcomingActivity.start)}
                         </p>
-                         <p className="text-gray-700 dark:text-gray-300">
+                         <p className="text-sm text-gray-700 dark:text-gray-300">
                             <span className="font-semibold">Fin:</span> {formatDate(upcomingActivity.end)}
                         </p>
                     </div>
+
+                    <div className="py-2 min-h-[60px]">
+                        {isLoadingOverlaps ? (
+                            <div className="h-8 flex items-center">
+                                <p className="text-xs text-gray-400 animate-pulse">Recherche de collègues...</p>
+                            </div>
+                        ) : overlappingUsers.length > 0 ? (
+                            <div>
+                                <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">Avec vous sur cette garde :</p>
+                                <div className="flex items-center">
+                                    {overlappingUsers.map((ou, index) => (
+                                        <img
+                                            key={ou.id}
+                                            className={`h-8 w-8 rounded-full ring-2 ring-white dark:ring-gray-800 ${index > 0 ? '-ml-2' : ''}`}
+                                            src={ou.avatarUrl}
+                                            alt={`${ou.prenom} ${ou.nom}`}
+                                            title={`${ou.prenom} ${ou.nom}`}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        ) : null}
+                    </div>
+
                     <div className="flex-grow flex items-end">
                         <button 
                             onClick={() => onSelectActivity(upcomingActivity)}

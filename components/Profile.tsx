@@ -1,9 +1,11 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Grade } from '../types';
 
 interface ProfileProps {
   user: User;
   onUpdateUser: (updatedUser: User) => void;
+  onLogout: () => void;
 }
 
 const FormInput: React.FC<{ label: string; id: string; type?: string; value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void }> = ({ label, id, type = 'text', value, onChange }) => (
@@ -43,7 +45,7 @@ const FormSelect: React.FC<{ label: string; id: string; value: string; onChange:
     </div>
 );
 
-export const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser }) => {
+export const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser, onLogout }) => {
     const [formData, setFormData] = useState(user);
     const [isDirty, setIsDirty] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -81,7 +83,6 @@ export const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser }) => {
         e.preventDefault();
         onUpdateUser(formData);
         setIsDirty(false);
-        // Add a visual confirmation if desired
     };
 
     const handleCancel = () => {
@@ -92,7 +93,12 @@ export const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser }) => {
     return (
         <div className="p-4 sm:p-6 lg:p-8">
             <div className="max-w-4xl mx-auto">
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-6">Profil Utilisateur</h1>
+                 <div className="flex justify-between items-center mb-6">
+                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Profil Utilisateur</h1>
+                    <button onClick={onLogout} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
+                        Déconnexion
+                    </button>
+                </div>
                 <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 shadow-md rounded-lg overflow-hidden">
                     <input
                         type="file"
