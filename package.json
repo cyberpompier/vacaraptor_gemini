@@ -10,6 +10,7 @@
     "express": "^4.19.2"
   },
   "devDependencies": {
-    "@remix-run/dev": "^2.9.2"
+    "@remix-run/dev": "^2.9.2",
+    "@vitejs/plugin-react": "^4.3.1"
   }
 }
