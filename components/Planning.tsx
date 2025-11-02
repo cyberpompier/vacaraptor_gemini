@@ -27,6 +27,7 @@ const ACTIVITY_TYPE_COLORS: Record<ActivityType, string> = {
 
 export const Planning: React.FC<PlanningProps> = ({ activities, onSelectActivity, onAddActivity, currentDate, setCurrentDate }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [dateForNewActivity, setDateForNewActivity] = useState<Date | null>(null);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -48,6 +49,17 @@ export const Planning: React.FC<PlanningProps> = ({ activities, onSelectActivity
     }).sort((a,b) => a.start.getTime() - b.start.getTime());
   };
   
+  const handleAddActivityForDay = (day: number) => {
+    const targetDate = new Date(year, month, day);
+    setDateForNewActivity(targetDate);
+    setIsModalOpen(true);
+  };
+  
+  const handleOpenAddModalForToday = () => {
+    setDateForNewActivity(null); 
+    setIsModalOpen(true);
+  }
+
   const today = new Date();
   const isToday = (day: number) => {
       return day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
@@ -55,7 +67,12 @@ export const Planning: React.FC<PlanningProps> = ({ activities, onSelectActivity
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
-      <AddActivityModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onAddActivity={onAddActivity} />
+      <AddActivityModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        onAddActivity={onAddActivity}
+        selectedDate={dateForNewActivity} 
+      />
       <div className="max-w-7xl mx-auto bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-4 p-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center gap-2 sm:gap-4">
@@ -70,46 +87,50 @@ export const Planning: React.FC<PlanningProps> = ({ activities, onSelectActivity
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600 dark:text-gray-300" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" /></svg>
                  </button>
             </div>
-             <button onClick={goToToday} className="hidden sm:block px-3 py-1 text-sm font-medium border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200">
-                Aujourd'hui
-            </button>
+            <button onClick={goToToday} className="hidden sm:block px-3 py-1 border border-gray-300 dark:border-gray-500 text-xs font-medium rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">Aujourd'hui</button>
           </div>
-          <button onClick={() => setIsModalOpen(true)} className="px-4 py-2 bg-brand-red text-white text-sm font-medium rounded-md hover:bg-brand-red-dark transition whitespace-nowrap">
+          <button 
+            onClick={handleOpenAddModalForToday}
+            className="w-full sm:w-auto bg-brand-red text-white py-2 px-4 rounded-lg shadow hover:bg-brand-red-dark transition whitespace-nowrap"
+          >
             Ajouter une activité
           </button>
         </div>
         
         <div className="grid grid-cols-7">
             {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map(day => (
-                <div key={day} className="py-2 text-center text-xs font-semibold text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700">{day}</div>
+                <div key={day} className="text-center py-2 text-xs font-semibold text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">{day}</div>
             ))}
         </div>
-
-        <div className="grid grid-cols-7 grid-rows-5">
-          {blanks.map(b => <div key={`blank-${b}`} className="border-r border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 min-h-[120px]"></div>)}
-          {days.map((day, index) => {
-            const dayActivities = getActivitiesForDay(day);
-            const dayOfWeek = (firstDay + index) % 7;
-            return (
-              <div key={day} className={`relative p-1 sm:p-2 border-t border-r border-gray-200 dark:border-gray-700 min-h-[120px] ${dayOfWeek === 6 ? 'border-r-0' : ''}`}>
-                <span className={`flex items-center justify-center h-6 w-6 text-sm font-medium rounded-full ${isToday(day) ? 'bg-brand-red text-white' : 'text-gray-900 dark:text-white'}`}>
-                    {day}
-                </span>
-                <div className="mt-1 space-y-1 overflow-y-auto max-h-24">
-                    {dayActivities.map(act => (
-                        <div 
-                            key={act.id}
-                            onClick={() => onSelectActivity(act)}
-                            className={`p-1 rounded text-[10px] sm:text-xs truncate cursor-pointer hover:opacity-80 transition ${ACTIVITY_TYPE_COLORS[act.type]}`}
-                            title={`${act.type} - ${act.start.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`}
-                        >
-                            <span className="font-semibold">{act.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span> <span className="hidden sm:inline">{act.type.split('(')[0]}</span>
+        <div className="grid grid-cols-7 gap-px bg-gray-200 dark:bg-gray-600">
+            {blanks.map(blank => (
+                <div key={`blank-${blank}`} className="bg-gray-50 dark:bg-gray-900/50"></div>
+            ))}
+            {days.map(day => {
+                const activitiesForDay = getActivitiesForDay(day);
+                return (
+                    <div 
+                        key={day} 
+                        onClick={() => handleAddActivityForDay(day)} 
+                        className="relative min-h-[100px] sm:min-h-[120px] bg-white dark:bg-gray-800 p-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors duration-200"
+                    >
+                        <span className={`absolute top-2 right-2 text-xs font-bold ${isToday(day) ? 'bg-brand-red text-white rounded-full h-6 w-6 flex items-center justify-center' : 'text-gray-500 dark:text-gray-400'}`}>
+                            {day}
+                        </span>
+                        <div className="mt-8 space-y-1 overflow-y-auto max-h-[80px]">
+                            {activitiesForDay.map(act => (
+                                <div
+                                    key={act.id}
+                                    onClick={(e) => { e.stopPropagation(); onSelectActivity(act); }}
+                                    className={`p-1 rounded-md text-xs truncate cursor-pointer ${ACTIVITY_TYPE_COLORS[act.type]}`}
+                                >
+                                    {act.type.split('(')[0]}
+                                </div>
+                            ))}
                         </div>
-                    ))}
-                </div>
-              </div>
-            );
-          })}
+                    </div>
+                );
+            })}
         </div>
       </div>
     </div>

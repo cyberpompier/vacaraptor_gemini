@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { User, SubscriptionStatus } from '../types';
 import { functions } from '../services/firebase';
+import { httpsCallable } from 'firebase/functions';
 
 // This is a placeholder for your actual Stripe publishable key.
 // In a real app, this should be loaded from environment variables.
@@ -42,9 +43,9 @@ export const Subscription: React.FC<SubscriptionProps> = ({ user }) => {
     setError('');
     try {
         // This is a placeholder for your Cloud Function name
-        const createCheckoutSession = functions.httpsCallable('createStripeCheckoutSession');
-        const { data } = await createCheckoutSession();
-        const sessionId = (data as any).sessionId;
+        const createCheckoutSession = httpsCallable(functions, 'createStripeCheckoutSession');
+        const result = await createCheckoutSession();
+        const sessionId = (result.data as any).sessionId;
 
         const stripe = (window as any).Stripe(STRIPE_PUBLISHABLE_KEY);
         await stripe.redirectToCheckout({ sessionId });

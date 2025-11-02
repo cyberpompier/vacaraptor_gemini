@@ -1,8 +1,15 @@
-// FIX: Switched to Firebase v9 compat imports to resolve module loading error.
-import firebase from "firebase/compat/app";
-import "firebase/compat/auth";
-import "firebase/compat/firestore";
-import "firebase/compat/functions";
+import { initializeApp } from "firebase/app";
+import { 
+  getAuth, 
+  setPersistence, 
+  browserSessionPersistence, 
+  GoogleAuthProvider, 
+  signInWithRedirect,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+} from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
+import { getFunctions } from "firebase/functions";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -16,34 +23,29 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-if (!firebase.apps.length) {
-  firebase.initializeApp(firebaseConfig);
-}
+const app = initializeApp(firebaseConfig);
 
-export const auth = firebase.auth();
-export const db = firebase.firestore();
-export const functions = firebase.functions();
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+export const functions = getFunctions(app);
 
-// FIX: Set auth persistence to 'session' to prevent errors in restricted
+// Set auth persistence to 'session' to prevent errors in restricted
 // environments (like sandboxed iframes) where web storage might be disabled.
-// This uses session storage instead of IndexedDB (the default).
-auth.setPersistence(firebase.auth.Auth.Persistence.SESSION)
+setPersistence(auth, browserSessionPersistence)
   .catch((error) => {
     console.error("Firebase persistence error:", error.code, error.message);
   });
 
-const googleProvider = new firebase.auth.GoogleAuthProvider();
+const googleProvider = new GoogleAuthProvider();
 
 export const signInWithGoogle = () => {
-  return auth.signInWithPopup(googleProvider);
+  return signInWithRedirect(auth, googleProvider);
 };
 
-// FIX: Added types for email and password parameters.
 export const signUpWithEmail = (email: string, password: string) => {
-    return auth.createUserWithEmailAndPassword(email, password);
+    return createUserWithEmailAndPassword(auth, email, password);
 };
 
-// FIX: Added types for email and password parameters.
 export const signInWithEmail = (email: string, password: string) => {
-    return auth.signInWithEmailAndPassword(email, password);
+    return signInWithEmailAndPassword(auth, email, password);
 };

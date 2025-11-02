@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import firebase from 'firebase/compat/app';
+import { Timestamp, arrayUnion, collection, doc, getDoc, setDoc, updateDoc, query, orderBy, onSnapshot, addDoc, deleteDoc } from 'firebase/firestore';
 import { Header } from './components/Header';
 import { Dashboard } from './components/Dashboard';
 import { ActivityDetail } from './components/ActivityDetail';
@@ -49,10 +49,10 @@ const App: React.FC = () => {
 
     const authUnsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
       if (firebaseUser) {
-        const userRef = db.collection('users').doc(firebaseUser.uid);
-        const docSnap = await userRef.get();
+        const userRef = doc(db, 'users', firebaseUser.uid);
+        const docSnap = await getDoc(userRef);
 
-        if (docSnap.exists) {
+        if (docSnap.exists()) {
           let userData = docSnap.data() as User;
           let needsDBUpdate = false;
           
@@ -84,11 +84,12 @@ const App: React.FC = () => {
           }
           
           if (needsDBUpdate) {
-             const dataToUpdate: any = { subscription: userData.subscription };
-             if (dataToUpdate.subscription.trialEndsAt) {
-                 dataToUpdate.subscription.trialEndsAt = firebase.firestore.Timestamp.fromDate(dataToUpdate.subscription.trialEndsAt);
+             const sub = userData.subscription!;
+             const firestoreSubscription: any = { status: sub.status };
+             if (sub.trialEndsAt) {
+                 firestoreSubscription.trialEndsAt = Timestamp.fromDate(sub.trialEndsAt);
              }
-             await userRef.update(dataToUpdate);
+             await updateDoc(userRef, { subscription: firestoreSubscription });
           }
 
           setUser(userData);
@@ -118,16 +119,17 @@ const App: React.FC = () => {
               ...newUser,
               subscription: {
                   ...newUser.subscription,
-                  trialEndsAt: firebase.firestore.Timestamp.fromDate(trialEndDate),
+                  trialEndsAt: Timestamp.fromDate(trialEndDate),
               }
           }
-          await userRef.set(newUserForFirestore);
+          const userRef = doc(db, 'users', firebaseUser.uid);
+          await setDoc(userRef, newUserForFirestore);
           setUser(newUser);
         }
         
         // Fetch user's activities in real-time
-        activitiesUnsubscribe = db.collection('users').doc(firebaseUser.uid).collection('activities').orderBy('start', 'asc')
-          .onSnapshot(snapshot => {
+        const activitiesQuery = query(collection(db, 'users', firebaseUser.uid, 'activities'), orderBy('start', 'asc'));
+        activitiesUnsubscribe = onSnapshot(activitiesQuery, snapshot => {
             const userActivities = snapshot.docs.map(doc => {
               const data = doc.data();
               return {
@@ -204,15 +206,21 @@ const App: React.FC = () => {
         const dataToUpdate = dataToUpdateAny as any;
 
         // Convert Dates back to Timestamps before sending to Firestore
-        if (dataToUpdate.subscription?.trialEndsAt) {
-            dataToUpdate.subscription.trialEndsAt = firebase.firestore.Timestamp.fromDate(dataToUpdate.subscription.trialEndsAt);
-        }
-        if (dataToUpdate.subscription?.endsAt) {
-            dataToUpdate.subscription.endsAt = firebase.firestore.Timestamp.fromDate(dataToUpdate.subscription.endsAt);
+        // and ensure no 'undefined' values are sent.
+        if (dataToUpdate.subscription) {
+            const sub = updatedUser.subscription!; // Use original updatedUser with Date objects
+            const firestoreSub: { [key: string]: any } = { status: sub.status };
+            if (sub.trialEndsAt) {
+                firestoreSub.trialEndsAt = Timestamp.fromDate(sub.trialEndsAt);
+            }
+            if (sub.endsAt) {
+                firestoreSub.endsAt = Timestamp.fromDate(sub.endsAt);
+            }
+            dataToUpdate.subscription = firestoreSub;
         }
 
-        const userRef = db.collection('users').doc(id);
-        await userRef.update(dataToUpdate);
+        const userRef = doc(db, 'users', id);
+        await updateDoc(userRef, dataToUpdate);
         setUser(updatedUser); // Update local state immediately for a responsive UI
     }
   };
@@ -226,13 +234,13 @@ const App: React.FC = () => {
     
     const activityToSave = {
         ...newActivityData,
-        start: firebase.firestore.Timestamp.fromDate(newActivityData.start),
-        end: firebase.firestore.Timestamp.fromDate(newActivityData.end),
+        start: Timestamp.fromDate(newActivityData.start),
+        end: Timestamp.fromDate(newActivityData.end),
         status: ActivityStatus.Saisie,
         interventions: [],
     };
     
-    await db.collection('users').doc(user.id).collection('activities').add(activityToSave);
+    await addDoc(collection(db, 'users', user.id, 'activities'), activityToSave);
     setCurrentCalendarDate(newActivityData.start);
   };
 
@@ -242,14 +250,14 @@ const App: React.FC = () => {
     const newIntervention = {
         ...interventionData,
         id: `inter-${Date.now()}`,
-        start: firebase.firestore.Timestamp.fromDate(interventionData.start),
-        end: firebase.firestore.Timestamp.fromDate(interventionData.end),
+        start: Timestamp.fromDate(interventionData.start),
+        end: Timestamp.fromDate(interventionData.end),
     };
 
-    const activityRef = db.collection('users').doc(user.id).collection('activities').doc(activityId);
+    const activityRef = doc(db, 'users', user.id, 'activities', activityId);
     
-    await activityRef.update({
-        interventions: firebase.firestore.FieldValue.arrayUnion(newIntervention)
+    await updateDoc(activityRef, {
+        interventions: arrayUnion(newIntervention)
     });
   };
 
@@ -258,16 +266,16 @@ const App: React.FC = () => {
     
     const dataToSave: { [key: string]: any } = { ...updatedData };
     if (updatedData.start) {
-      dataToSave.start = firebase.firestore.Timestamp.fromDate(updatedData.start);
+      dataToSave.start = Timestamp.fromDate(updatedData.start);
     }
     if (updatedData.end) {
-      dataToSave.end = firebase.firestore.Timestamp.fromDate(updatedData.end);
+      dataToSave.end = Timestamp.fromDate(updatedData.end);
     }
 
-    const activityRef = db.collection('users').doc(user.id).collection('activities').doc(activityId);
+    const activityRef = doc(db, 'users', user.id, 'activities', activityId);
     
     try {
-      await activityRef.update(dataToSave);
+      await updateDoc(activityRef, dataToSave);
     } catch (error) {
       console.error("Error updating activity:", error);
       throw new Error("La mise à jour de l'activité a échoué.");
@@ -277,10 +285,10 @@ const App: React.FC = () => {
   const handleDeleteActivity = async (activityId: string) => {
     if (!user) throw new Error("Utilisateur non connecté.");
     
-    const activityRef = db.collection('users').doc(user.id).collection('activities').doc(activityId);
+    const activityRef = doc(db, 'users', user.id, 'activities', activityId);
     
     try {
-      await activityRef.delete();
+      await deleteDoc(activityRef);
       setSelectedActivity(null);
     } catch (error) {
       console.error("Error deleting activity:", error);

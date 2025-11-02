@@ -4,6 +4,7 @@ import { Activity, User, Intervention, ActivityType } from '../types';
 import { calculateActivityPay, calculateInterventionPay } from '../services/calculationService';
 import { InterventionListModal } from './InterventionListModal';
 import { db } from '../services/firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
 interface DashboardProps {
   user: User;
@@ -84,10 +85,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, activities, onSelect
         setIsLoadingOverlaps(true);
         try {
             // 1. Get users from the same station. We will filter out the current user on the client side.
-            // This avoids a complex query that requires a custom index.
-            const usersSnapshot = await db.collection('users')
-                .where('caserne', '==', user.caserne)
-                .get();
+            const usersCollectionRef = collection(db, 'users');
+            const q = query(usersCollectionRef, where('caserne', '==', user.caserne));
+            const usersSnapshot = await getDocs(q);
 
             const allStationUsers = usersSnapshot.docs.map(doc => doc.data() as User);
             const stationUsers = allStationUsers.filter(stationUser => stationUser.id !== user.id);
@@ -101,9 +101,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, activities, onSelect
             // 2. For each user, check for overlapping activities using a valid query
             const overlapPromises = stationUsers.map(async (stationUser) => {
                 // A valid Firestore query: find activities that START before the upcoming activity ENDS.
-                const activitiesSnapshot = await db.collection('users').doc(stationUser.id).collection('activities')
-                    .where('start', '<', upcomingActivity.end)
-                    .get();
+                const userActivitiesCollectionRef = collection(db, 'users', stationUser.id, 'activities');
+                const activitiesQuery = query(userActivitiesCollectionRef, where('start', '<', upcomingActivity.end));
+                const activitiesSnapshot = await getDocs(activitiesQuery);
                 
                 // Then, filter on the client-side for the actual overlap.
                 const hasOverlap = activitiesSnapshot.docs.some(doc => {

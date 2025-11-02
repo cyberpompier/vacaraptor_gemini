@@ -5,6 +5,7 @@ interface AddActivityModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddActivity: (activity: Omit<Activity, 'id' | 'status' | 'interventions'>) => void;
+  selectedDate?: Date | null;
 }
 
 const DURATION_MAP: Partial<Record<ActivityType, number>> = {
@@ -27,7 +28,7 @@ const formatDateForInput = (date: Date): string => {
     return `${year}-${month}-${day}T${hours}:${minutes}`;
 };
 
-export const AddActivityModal: React.FC<AddActivityModalProps> = ({ isOpen, onClose, onAddActivity }) => {
+export const AddActivityModal: React.FC<AddActivityModalProps> = ({ isOpen, onClose, onAddActivity, selectedDate }) => {
   const [type, setType] = useState<ActivityType>(ActivityType.G24);
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
@@ -36,11 +37,13 @@ export const AddActivityModal: React.FC<AddActivityModalProps> = ({ isOpen, onCl
   // Effect to manage form state when modal is opened or closed
   useEffect(() => {
     if (isOpen) {
-      // When the modal opens, pre-fill the start time to now.
-      // This will trigger the other useEffect to adjust the time and calculate the end date.
-      const now = new Date();
-      now.setSeconds(0, 0); // Clean up seconds for the input
-      setStart(formatDateForInput(now));
+      // When the modal opens, pre-fill with the selected date if provided, otherwise default to now.
+      const initialDate = selectedDate ? new Date(selectedDate) : new Date();
+      initialDate.setSeconds(0, 0); // Clean up seconds for the input
+      
+      // We let the next effect handle the time adjustment based on type,
+      // but we set the date from the selection.
+      setStart(formatDateForInput(initialDate));
     } else {
       // When the modal closes, reset the form for the next time it's opened.
       setType(ActivityType.G24);
@@ -48,7 +51,7 @@ export const AddActivityModal: React.FC<AddActivityModalProps> = ({ isOpen, onCl
       setEnd('');
       setNotes('');
     }
-  }, [isOpen]);
+  }, [isOpen, selectedDate]);
 
 
   useEffect(() => {
