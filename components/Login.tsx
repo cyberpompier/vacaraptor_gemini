@@ -54,7 +54,7 @@ export const Login: React.FC = () => {
             <div className="w-full max-w-md">
                 <div className="bg-white dark:bg-gray-800 shadow-xl rounded-2xl p-8 sm:p-12 text-center">
                     <div className="flex justify-center mb-6">
-                         <img src="/vacaraptor-logo.png" alt="VACARAPTOR Logo" className="h-24 w-auto" />
+                         <img src="/public/vacaraptor-logo.png" alt="VACARAPTOR Logo" className="h-24 w-auto" />
                     </div>
                     <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">VACARAPTOR</h1>
                     <p className="text-gray-600 dark:text-gray-300 mb-8">{isSignUp ? "Créez votre compte" : "Connectez-vous pour continuer"}</p>

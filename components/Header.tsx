@@ -48,7 +48,7 @@ export const Header: React.FC<HeaderProps> = ({ user, activeView, setActiveView 
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center">
               <div className="flex-shrink-0 flex items-center gap-2">
-                  <img src="/vacaraptor-logo.png" alt="VACARAPTOR Logo" className="h-10 w-auto" />
+                  <img src="/public/vacaraptor-logo.png" alt="VACARAPTOR Logo" className="h-10 w-auto" />
                   <span className="text-white text-xl font-bold">VACARAPTOR</span>
               </div>
               <nav className="hidden md:block ml-10">

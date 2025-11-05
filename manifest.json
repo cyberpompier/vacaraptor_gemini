@@ -4,17 +4,17 @@
   "description": "An application for volunteer firefighters to log and calculate their on-call duties, interventions, and training sessions according to their fire station's remuneration rules.",
   "icons": [
     {
-      "src": "/ecran-tel.png",
+      "src": "/public/ecran-tel.png",
       "type": "image/png",
       "sizes": "192x192"
     },
     {
-      "src": "/ecran-tel.png",
+      "src": "/public/ecran-tel.png",
       "type": "image/png",
       "sizes": "512x512"
     },
     {
-      "src": "/ecran-tel.png",
+      "src": "/public/ecran-tel.png",
       "type": "image/png",
       "sizes": "512x512",
       "purpose": "maskable"

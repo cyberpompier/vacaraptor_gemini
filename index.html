@@ -2,8 +2,8 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/ecran-tel.png" />
-    <link rel="apple-touch-icon" href="/ecran-tel.png" />
+    <link rel="icon" type="image/png" href="/public/ecran-tel.png" />
+    <link rel="apple-touch-icon" href="/public/ecran-tel.png" />
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#d32f2f" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
@@ -56,13 +56,20 @@
     <script type="module" src="/index.tsx"></script>
     <script>
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').then(registration => {
-            console.log('Service Worker registered: ', registration);
-          }).catch(registrationError => {
-            console.log('Service Worker registration failed: ', registrationError);
+        // We register the service worker as soon as the script is parsed, rather than
+        // waiting for the `load` event. In some sandboxed environments, the timing of
+        // the `load` event can be unpredictable and lead to an "invalid state" error.
+        // Since this script is at the end of the <body>, the DOM is ready.
+        const swUrl = `${window.location.origin}/sw.js`;
+        navigator.serviceWorker.register(swUrl)
+          .then(registration => {
+            console.log('Service Worker registered successfully with scope:', registration.scope);
+          })
+          .catch(registrationError => {
+            console.error('Service Worker registration failed:', registrationError);
+            console.error('Attempted to register:', swUrl);
+            console.error('Current origin:', window.location.origin);
           });
-        });
       }
     </script>
   </body>

@@ -3,8 +3,8 @@ const urlsToCache = [
   '/',
   '/index.html',
   '/index.tsx',
-  '/ecran-tel.png',
-  '/vacaraptor-logo.png'
+  '/public/ecran-tel.png',
+  '/public/vacaraptor-logo.png'
 ];
 
 self.addEventListener('install', event => {
