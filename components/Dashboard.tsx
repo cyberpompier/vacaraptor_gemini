@@ -3,8 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Activity, User, Intervention, ActivityType } from '../types';
 import { calculateActivityPay, calculateInterventionPay } from '../services/calculationService';
 import { InterventionListModal } from './InterventionListModal';
-import { db } from '../services/firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { supabase } from '../services/supabase';
 
 interface DashboardProps {
   user: User;
@@ -84,35 +83,38 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, activities, onSelect
 
         setIsLoadingOverlaps(true);
         try {
-            // 1. Get users from the same station. We will filter out the current user on the client side.
-            const usersCollectionRef = collection(db, 'users');
-            const q = query(usersCollectionRef, where('caserne', '==', user.caserne));
-            const usersSnapshot = await getDocs(q);
+            // 1. Get users from the same station, excluding the current user.
+            const { data: stationUsers, error: usersError } = await supabase
+                .from('users')
+                .select('*')
+                .eq('caserne', user.caserne)
+                .neq('id', user.id);
 
-            const allStationUsers = usersSnapshot.docs.map(doc => doc.data() as User);
-            const stationUsers = allStationUsers.filter(stationUser => stationUser.id !== user.id);
-
-            if (stationUsers.length === 0) {
+            if (usersError) throw usersError;
+            if (!stationUsers || stationUsers.length === 0) {
                 setOverlappingUsers([]);
                 setIsLoadingOverlaps(false);
                 return;
             }
 
-            // 2. For each user, check for overlapping activities using a valid query
+            // 2. For each user, check for overlapping activities.
             const overlapPromises = stationUsers.map(async (stationUser) => {
-                // A valid Firestore query: find activities that START before the upcoming activity ENDS.
-                const userActivitiesCollectionRef = collection(db, 'users', stationUser.id, 'activities');
-                const activitiesQuery = query(userActivitiesCollectionRef, where('start', '<', upcomingActivity.end));
-                const activitiesSnapshot = await getDocs(activitiesQuery);
-                
-                // Then, filter on the client-side for the actual overlap.
-                const hasOverlap = activitiesSnapshot.docs.some(doc => {
-                    const activityData = doc.data();
-                    // An activity overlaps if its END is after the upcoming one STARTS.
-                    return activityData.end.toDate() > upcomingActivity.start;
-                });
+                const { data: activities, error: activitiesError } = await supabase
+                    .from('activities')
+                    .select('id')
+                    .eq('user_id', stationUser.id)
+                    // An activity overlaps if its start is before the upcoming one ends
+                    .lt('start', upcomingActivity.end.toISOString())
+                    // AND its end is after the upcoming one starts.
+                    .gt('end', upcomingActivity.start.toISOString())
+                    .limit(1); // We only need to know if at least one exists.
 
-                return hasOverlap ? stationUser : null;
+                if (activitiesError) {
+                    console.error(`Error fetching activities for user ${stationUser.id}:`, activitiesError);
+                    return null;
+                }
+
+                return activities && activities.length > 0 ? stationUser : null;
             });
 
             const results = await Promise.all(overlapPromises);

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { signInWithGoogle, signInWithEmail, signUpWithEmail } from '../services/firebase';
+import { supabase } from '../services/supabase';
 
 const GoogleIcon = () => (
     <svg className="w-5 h-5 mr-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
@@ -20,32 +20,39 @@ export const Login: React.FC = () => {
         e.preventDefault();
         setError('');
         try {
+            let error;
             if (isSignUp) {
-                await signUpWithEmail(email, password);
+                const { error: signUpError } = await supabase.auth.signUp({ email, password });
+                error = signUpError;
             } else {
-                await signInWithEmail(email, password);
+                const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+                error = signInError;
+            }
+
+            if (error) {
+                if (error.message.includes("Invalid login credentials")) {
+                    setError('Email ou mot de passe incorrect.');
+                } else if (error.message.includes("already registered")) {
+                    setError('Cette adresse email est déjà utilisée.');
+                } else if (error.message.includes("6 characters")) {
+                    setError('Le mot de passe doit contenir au moins 6 caractères.');
+                }
+                else {
+                    setError(error.message);
+                }
             }
             // onAuthStateChanged in App.tsx will handle the rest
         } catch (err: any) {
-            switch (err.code) {
-                case 'auth/invalid-email':
-                    setError('Adresse email invalide.');
-                    break;
-                case 'auth/user-not-found':
-                case 'auth/wrong-password':
-                case 'auth/invalid-credential':
-                    setError('Email ou mot de passe incorrect.');
-                    break;
-                case 'auth/email-already-in-use':
-                    setError('Cette adresse email est déjà utilisée.');
-                    break;
-                case 'auth/weak-password':
-                    setError('Le mot de passe doit contenir au moins 6 caractères.');
-                    break;
-                default:
-                    setError('Une erreur est survenue. Veuillez réessayer.');
-                    break;
-            }
+             setError('Une erreur est survenue. Veuillez réessayer.');
+        }
+    };
+
+    const handleGoogleSignIn = async () => {
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+        });
+        if (error) {
+            setError(error.message);
         }
     };
 
@@ -102,7 +109,7 @@ export const Login: React.FC = () => {
                     </div>
 
                     <button
-                        onClick={signInWithGoogle}
+                        onClick={handleGoogleSignIn}
                         className="w-full inline-flex justify-center items-center py-3 px-4 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm bg-white dark:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-red transition"
                     >
                         <GoogleIcon />

@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Timestamp, arrayUnion, collection, doc, getDoc, setDoc, updateDoc, query, orderBy, onSnapshot, addDoc, deleteDoc } from 'firebase/firestore';
 import { Header } from './components/Header';
 import { Dashboard } from './components/Dashboard';
 import { ActivityDetail } from './components/ActivityDetail';
@@ -9,10 +8,11 @@ import { Settings } from './components/Settings';
 import { Subscription as SubscriptionPage } from './components/Subscription';
 import { Paywall } from './components/Paywall';
 import { Login } from './components/Login';
-import { auth, db } from './services/firebase';
+import { supabase } from './services/supabase';
 import { Activity, User, ActivityStatus, Intervention, Grade, UserSettings, SubscriptionStatus } from './types';
 import { DEFAULT_ACTIVITY_COEFFICIENTS, DEFAULT_TIME_SLOTS } from './constants';
 import { BottomNav } from './components/BottomNav';
+import { Session } from '@supabase/supabase-js';
 
 type View = 'dashboard' | 'calendar' | 'profile' | 'settings' | 'subscription';
 
@@ -21,10 +21,6 @@ const ensureDate = (date: any): Date | undefined => {
     if (!date) return undefined;
     // Already a Date object
     if (date instanceof Date) return date;
-    // Handle Firestore Timestamps, which have a toDate method
-    if (typeof date.toDate === 'function') {
-        return date.toDate();
-    }
     // Handle ISO strings or numbers (milliseconds from epoch)
     const parsedDate = new Date(date);
     if (!isNaN(parsedDate.getTime())) {
@@ -36,130 +32,148 @@ const ensureDate = (date: any): Date | undefined => {
 
 
 const App: React.FC = () => {
+  console.log("App component rendering");
   const [activeView, setActiveView] = useState<View>('dashboard');
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date());
   const [isSubscriptionActive, setIsSubscriptionActive] = useState(true);
 
   useEffect(() => {
-    let activitiesUnsubscribe: () => void | undefined;
-
-    const authUnsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
-      if (firebaseUser) {
-        const userRef = doc(db, 'users', firebaseUser.uid);
-        const docSnap = await getDoc(userRef);
-
-        if (docSnap.exists()) {
-          let userData = docSnap.data() as User;
-          let needsDBUpdate = false;
-          
-          // Initialize settings if they don't exist
-          const mergedSettings: UserSettings = {
-            timeSlots: userData.settings?.timeSlots || DEFAULT_TIME_SLOTS,
-            activityCoefficients: {
-              ...DEFAULT_ACTIVITY_COEFFICIENTS,
-              ...(userData.settings?.activityCoefficients || {}),
-            },
-          };
-          userData.settings = mergedSettings;
-          
-          // Initialize subscription for existing users (migration)
-          if (!userData.subscription) {
-              const trialEndDate = new Date();
-              trialEndDate.setDate(trialEndDate.getDate() + 14); // 14-day trial
-              userData.subscription = {
-                  status: SubscriptionStatus.TRIALING,
-                  trialEndsAt: trialEndDate,
-              };
-              needsDBUpdate = true;
-          }
-
-          // Ensure subscription dates are proper Date objects
-          if (userData.subscription) {
-            userData.subscription.trialEndsAt = ensureDate(userData.subscription.trialEndsAt);
-            userData.subscription.endsAt = ensureDate(userData.subscription.endsAt);
-          }
-          
-          if (needsDBUpdate) {
-             const sub = userData.subscription!;
-             const firestoreSubscription: any = { status: sub.status };
-             if (sub.trialEndsAt) {
-                 firestoreSubscription.trialEndsAt = Timestamp.fromDate(sub.trialEndsAt);
-             }
-             await updateDoc(userRef, { subscription: firestoreSubscription });
-          }
-
-          setUser(userData);
-        } else {
-          // Create new user
-          const trialEndDate = new Date();
-          trialEndDate.setDate(trialEndDate.getDate() + 14);
-          const newUser: User = {
-            id: firebaseUser.uid,
-            nom: firebaseUser.displayName?.split(' ').slice(1).join(' ') || 'Utilisateur',
-            prenom: firebaseUser.displayName?.split(' ')[0] || 'Nouveau',
-            email: firebaseUser.email || '',
-            avatarUrl: firebaseUser.photoURL || `https://picsum.photos/seed/${firebaseUser.uid}/200`,
-            grade: Grade.Sapeur,
-            caserne: 'CS-Principal',
-            settings: {
-              timeSlots: DEFAULT_TIME_SLOTS,
-              activityCoefficients: DEFAULT_ACTIVITY_COEFFICIENTS,
-            },
-            subscription: {
-              status: SubscriptionStatus.TRIALING,
-              trialEndsAt: trialEndDate,
-            }
-          };
-          // Convert date to Timestamp for Firestore
-          const newUserForFirestore = {
-              ...newUser,
-              subscription: {
-                  ...newUser.subscription,
-                  trialEndsAt: Timestamp.fromDate(trialEndDate),
-              }
-          }
-          const userRef = doc(db, 'users', firebaseUser.uid);
-          await setDoc(userRef, newUserForFirestore);
-          setUser(newUser);
-        }
-        
-        // Fetch user's activities in real-time
-        const activitiesQuery = query(collection(db, 'users', firebaseUser.uid, 'activities'), orderBy('start', 'asc'));
-        activitiesUnsubscribe = onSnapshot(activitiesQuery, snapshot => {
-            const userActivities = snapshot.docs.map(doc => {
-              const data = doc.data();
-              return {
-                id: doc.id,
-                ...data,
-                start: data.start.toDate(),
-                end: data.end.toDate(),
-                interventions: data.interventions.map((inter: any) => ({
-                  ...inter,
-                  start: inter.start.toDate(),
-                  end: inter.end.toDate(),
-                }))
-              } as Activity;
-            });
-            setActivities(userActivities);
-          });
-
-      } else {
-        if (activitiesUnsubscribe) activitiesUnsubscribe();
-        setUser(null);
-        setActivities([]);
-      }
+    console.log("Setting up auth state change listener");
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log("Initial session:", session);
+      setSession(session);
+      // App is not loading anymore once we have the session
       setIsLoading(false);
     });
 
-    return () => {
-      authUnsubscribe();
-      if (activitiesUnsubscribe) activitiesUnsubscribe();
-    };
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+       // Also stop loading when auth state changes
+       setIsLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
+
+  // Fetch user profile and activities when session changes
+  useEffect(() => {
+    console.log("Session changed:", session);
+    if (!session) {
+      setUser(null);
+      setActivities([]);
+      return;
+    }
+
+    const fetchUserAndActivities = async () => {
+        // We might already be loading, but let's be sure
+        setIsLoading(true);
+
+        const supabaseUser = session.user;
+
+        // 1. Fetch user profile
+        const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', supabaseUser.id)
+            .single();
+
+        if (userError && userError.code !== 'PGRST116') { // PGRST116: 0 rows returned
+            console.error('Error fetching user:', userError);
+            setIsLoading(false);
+            return;
+        }
+
+        if (userData) {
+            // User exists, format and set user data
+             const formattedUser: User = {
+                ...userData,
+                subscription: {
+                    ...userData.subscription,
+                    trialEndsAt: ensureDate(userData.subscription?.trialEndsAt),
+                    endsAt: ensureDate(userData.subscription?.endsAt),
+                }
+            };
+            setUser(formattedUser);
+        } else {
+            // User does not exist, create a new profile
+            const trialEndDate = new Date();
+            trialEndDate.setDate(trialEndDate.getDate() + 14);
+            const newUser: User = {
+                id: supabaseUser.id,
+                nom: supabaseUser.user_metadata?.full_name?.split(' ').slice(1).join(' ') || 'Utilisateur',
+                prenom: supabaseUser.user_metadata?.full_name?.split(' ')[0] || 'Nouveau',
+                email: supabaseUser.email || '',
+                avatarUrl: supabaseUser.user_metadata?.avatar_url || `https://picsum.photos/seed/${supabaseUser.id}/200`,
+                grade: Grade.Sapeur,
+                caserne: 'CS-Principal',
+                settings: {
+                  timeSlots: DEFAULT_TIME_SLOTS,
+                  activityCoefficients: DEFAULT_ACTIVITY_COEFFICIENTS,
+                },
+                subscription: {
+                  status: SubscriptionStatus.TRIALING,
+                  trialEndsAt: trialEndDate,
+                }
+            };
+
+            const { error: insertError } = await supabase.from('users').insert(newUser);
+
+            if (insertError) {
+                console.error('Error creating user:', insertError);
+            } else {
+                setUser(newUser);
+            }
+        }
+        
+        // 2. Fetch user's activities
+        const { data: activitiesData, error: activitiesError } = await supabase
+            .from('activities')
+            .select('*')
+            .eq('user_id', supabaseUser.id)
+            .order('start', { ascending: true });
+
+        if (activitiesError) {
+            console.error('Error fetching activities:', activitiesError);
+        } else if (activitiesData) {
+            const userActivities = activitiesData.map((activity: any) => ({
+                ...activity,
+                start: new Date(activity.start),
+                end: new Date(activity.end),
+                interventions: (activity.interventions || []).map((inter: any) => ({
+                    ...inter,
+                    start: new Date(inter.start),
+                    end: new Date(inter.end),
+                })),
+            }));
+            setActivities(userActivities);
+        }
+
+        setIsLoading(false);
+    };
+
+    fetchUserAndActivities();
+
+    // 3. Set up real-time subscription for activities
+    const channel = supabase
+      .channel(`public:activities:user_id=eq.${session.user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'activities', filter: `user_id=eq.${session.user.id}` },
+        (payload) => {
+          console.log('Change received!', payload)
+          fetchUserAndActivities();
+        }
+      )
+      .subscribe();
+
+    return () => {
+        supabase.removeChannel(channel);
+    };
+
+  }, [session]);
 
   useEffect(() => {
       if (user && user.subscription) {
@@ -201,32 +215,40 @@ const App: React.FC = () => {
   };
   
   const handleUpdateUser = async (updatedUser: User) => {
-    if (user) {
-        const { id, ...dataToUpdateAny } = updatedUser;
-        const dataToUpdate = dataToUpdateAny as any;
+    if (!user) return;
 
-        // Convert Dates back to Timestamps before sending to Firestore
-        // and ensure no 'undefined' values are sent.
-        if (dataToUpdate.subscription) {
-            const sub = updatedUser.subscription!; // Use original updatedUser with Date objects
-            const firestoreSub: { [key: string]: any } = { status: sub.status };
-            if (sub.trialEndsAt) {
-                firestoreSub.trialEndsAt = Timestamp.fromDate(sub.trialEndsAt);
-            }
-            if (sub.endsAt) {
-                firestoreSub.endsAt = Timestamp.fromDate(sub.endsAt);
-            }
-            dataToUpdate.subscription = firestoreSub;
+    const { id, ...dataToUpdate } = updatedUser;
+
+    // Supabase expects ISO strings for timestamps
+    const dataForSupabase = {
+        ...dataToUpdate,
+        subscription: {
+            ...dataToUpdate.subscription,
+            trialEndsAt: dataToUpdate.subscription?.trialEndsAt ? dataToUpdate.subscription.trialEndsAt.toISOString() : null,
+            endsAt: dataToUpdate.subscription?.endsAt ? dataToUpdate.subscription.endsAt.toISOString() : null,
         }
+    };
 
-        const userRef = doc(db, 'users', id);
-        await updateDoc(userRef, dataToUpdate);
-        setUser(updatedUser); // Update local state immediately for a responsive UI
+    const { error } = await supabase
+      .from('users')
+      .update(dataForSupabase)
+      .eq('id', id);
+
+    if (error) {
+      console.error("Error updating user:", error);
+    } else {
+      setUser(updatedUser); // Update local state
     }
   };
 
   const handleLogout = async () => {
-    await auth.signOut();
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+        console.error('Error logging out:', error);
+    } else {
+        // Session change will trigger useEffect to clear user and activities
+        setActiveView('dashboard');
+    }
   }
 
   const handleAddActivity = async (newActivityData: Omit<Activity, 'id' | 'status' | 'interventions'>) => {
@@ -234,65 +256,97 @@ const App: React.FC = () => {
     
     const activityToSave = {
         ...newActivityData,
-        start: Timestamp.fromDate(newActivityData.start),
-        end: Timestamp.fromDate(newActivityData.end),
+        user_id: user.id, // Add user_id foreign key
+        start: newActivityData.start.toISOString(),
+        end: newActivityData.end.toISOString(),
         status: ActivityStatus.Saisie,
         interventions: [],
     };
     
-    await addDoc(collection(db, 'users', user.id, 'activities'), activityToSave);
-    setCurrentCalendarDate(newActivityData.start);
+    const { error } = await supabase.from('activities').insert(activityToSave);
+
+    if (error) {
+        console.error('Error adding activity:', error);
+    } else {
+        setCurrentCalendarDate(newActivityData.start);
+    }
   };
 
   const handleAddIntervention = async (activityId: string, interventionData: Omit<Intervention, 'id'>) => {
-    if (!user) return;
+     if (!user) return;
 
+    // 1. Fetch the current activity to get the existing interventions
+    const { data: activity, error: fetchError } = await supabase
+        .from('activities')
+        .select('interventions')
+        .eq('id', activityId)
+        .single();
+
+    if (fetchError || !activity) {
+        console.error('Error fetching activity before adding intervention:', fetchError);
+        return;
+    }
+
+    // 2. Prepare the new intervention
     const newIntervention = {
         ...interventionData,
         id: `inter-${Date.now()}`,
-        start: Timestamp.fromDate(interventionData.start),
-        end: Timestamp.fromDate(interventionData.end),
+        start: interventionData.start.toISOString(),
+        end: interventionData.end.toISOString(),
     };
 
-    const activityRef = doc(db, 'users', user.id, 'activities', activityId);
-    
-    await updateDoc(activityRef, {
-        interventions: arrayUnion(newIntervention)
-    });
+    // 3. Append the new intervention to the existing array
+    const updatedInterventions = [...(activity.interventions || []), newIntervention];
+
+    // 4. Update the activity with the new interventions array
+    const { error: updateError } = await supabase
+        .from('activities')
+        .update({ interventions: updatedInterventions })
+        .eq('id', activityId);
+
+    if (updateError) {
+        console.error('Error adding intervention:', updateError);
+    }
+    // No local state update needed as the real-time subscription will trigger a refresh
   };
 
-  const handleUpdateActivity = async (activityId: string, updatedData: Partial<Omit<Activity, 'id' | 'interventions'>>) => {
+  const handleUpdateActivity = async (activityId: string, updatedData: Partial<Omit<Activity, 'id' | 'interventions' | 'user_id'>>) => {
     if (!user) throw new Error("Utilisateur non connecté.");
     
     const dataToSave: { [key: string]: any } = { ...updatedData };
     if (updatedData.start) {
-      dataToSave.start = Timestamp.fromDate(updatedData.start);
+      dataToSave.start = updatedData.start.toISOString();
     }
     if (updatedData.end) {
-      dataToSave.end = Timestamp.fromDate(updatedData.end);
+      dataToSave.end = updatedData.end.toISOString();
     }
 
-    const activityRef = doc(db, 'users', user.id, 'activities', activityId);
+    const { error } = await supabase
+        .from('activities')
+        .update(dataToSave)
+        .eq('id', activityId);
     
-    try {
-      await updateDoc(activityRef, dataToSave);
-    } catch (error) {
+    if (error) {
       console.error("Error updating activity:", error);
       throw new Error("La mise à jour de l'activité a échoué.");
     }
+    // Real-time subscription will handle the update
   };
 
   const handleDeleteActivity = async (activityId: string) => {
     if (!user) throw new Error("Utilisateur non connecté.");
     
-    const activityRef = doc(db, 'users', user.id, 'activities', activityId);
+    const { error } = await supabase
+        .from('activities')
+        .delete()
+        .eq('id', activityId);
     
-    try {
-      await deleteDoc(activityRef);
-      setSelectedActivity(null);
-    } catch (error) {
+    if (error) {
       console.error("Error deleting activity:", error);
       throw new Error("La suppression de l'activité a échoué.");
+    } else {
+        setSelectedActivity(null);
+        // Real-time subscription will handle the UI update
     }
   };
 
