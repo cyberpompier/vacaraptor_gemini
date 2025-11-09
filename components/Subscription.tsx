@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { User, SubscriptionStatus } from '../types';
-import { functions } from '../services/firebase';
-import { httpsCallable } from 'firebase/functions';
+import { supabase } from '../services/supabase';
 
 // This is a placeholder for your actual Stripe publishable key.
 // In a real app, this should be loaded from environment variables.
@@ -42,10 +41,14 @@ export const Subscription: React.FC<SubscriptionProps> = ({ user }) => {
     setIsLoading(true);
     setError('');
     try {
-        // This is a placeholder for your Cloud Function name
-        const createCheckoutSession = httpsCallable(functions, 'createStripeCheckoutSession');
-        const result = await createCheckoutSession();
-        const sessionId = (result.data as any).sessionId;
+        // This is a placeholder for your Edge Function name
+        const { data, error } = await supabase.functions.invoke('createStripeCheckoutSession');
+
+        if (error) {
+            throw error;
+        }
+
+        const sessionId = data.sessionId;
 
         const stripe = (window as any).Stripe(STRIPE_PUBLISHABLE_KEY);
         await stripe.redirectToCheckout({ sessionId });
